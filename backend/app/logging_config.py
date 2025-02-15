@@ -1,8 +1,9 @@
-# app/logging_config.py
+# backend/app/logging_config.py
 import logging
 import sys
 from logging.config import dictConfig
 from typing import Dict, Any
+import os
 
 def setup_logging():
     """Setup logging configuration"""
@@ -44,7 +45,7 @@ def setup_logging():
             },
         },
         "loggers": {
-            "app": {  # Our application logger
+            "app": {
                 "handlers": ["console", "file"],
                 "level": "DEBUG",
                 "propagate": False,
@@ -60,15 +61,11 @@ def setup_logging():
                 "propagate": False,
             },
         },
-        "root": {  # Root logger
+        "root": {
             "handlers": ["console"],
             "level": "INFO",
         },
     }
 
-    # Create logs directory if it doesn't exist
-    import os
     os.makedirs("logs", exist_ok=True)
-
-    # Apply the configuration
     dictConfig(log_config)

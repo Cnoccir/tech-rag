@@ -1,21 +1,12 @@
-# app/frontend/app.py
 import streamlit as st
-import sys
-from pathlib import Path
 
-# Add the project root to Python path
-root_path = str(Path(__file__).parent.parent.parent)
-if root_path not in sys.path:
-    sys.path.append(root_path)
-
-# Use absolute imports
-from app.frontend.pages.login import show_login
-from app.frontend.pages.document_library import show_document_library
-from app.frontend.pages.admin_management import show_admin_management
-from app.frontend.pages.chat import show_chat
+# Import views from the new `views` directory
+from frontend.views.login import show_login
+from frontend.views.document_library import show_document_library
+from frontend.views.admin_management import show_admin_management
+from frontend.views.chat import show_chat
 
 def main():
-    """Main Streamlit application entry point"""
     st.set_page_config(page_title="Tech RAG", layout="wide")
 
     # Initialize session state
@@ -24,22 +15,31 @@ def main():
     if "is_admin" not in st.session_state:
         st.session_state.is_admin = False
     if "api_base_url" not in st.session_state:
+        # Adjust to your real FastAPI URL if different
         st.session_state.api_base_url = "http://localhost:8000/api/v1"
 
-    # Show login or main navigation
+    # If not logged in, show only the login form
     if not st.session_state.authenticated:
         show_login()
         return
 
-    # Navigation sidebar
+    # Now the user is authenticated, build a custom sidebar
     st.sidebar.title("Navigation")
-    pages = ["Document Library", "Chat"]
+
+    # Everyone sees Document Library
+    nav_options = ["Document Library"]
+
+    # Show “Chat” only if a document is selected
+    if "selected_document_id" in st.session_state:
+        nav_options.append("Chat")
+
+    # If user is admin, show Admin Panel
     if st.session_state.is_admin:
-        pages.append("Admin Panel")
+        nav_options.append("Admin Panel")
 
-    choice = st.sidebar.radio("Go to", pages)
+    choice = st.sidebar.radio("Go to", nav_options)
 
-    # Route to selected page
+    # Route to selected view
     if choice == "Document Library":
         show_document_library()
     elif choice == "Chat":

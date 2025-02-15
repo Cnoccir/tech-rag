@@ -4,11 +4,12 @@ from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query, 
 from sqlalchemy.orm import Session
 import logging
 
-from app.database.database import get_db
-from app.database.models import Document as DBDocument, User, DocumentStatus
-from app.routers.auth import get_current_user
-from app.schemas import Document
-from app.document.document_manager import DocumentManager
+from backend.app.database.database import get_db
+from backend.app.database.models import Document as DBDocument, User, DocumentStatus
+from backend.app.routers.auth import get_current_user
+from backend.app.schemas import Document
+from backend.app.document.document_manager import DocumentManager
+from backend.app.document.s3_manager import S3Manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -97,6 +98,28 @@ async def upload_document(
             detail=f"Error uploading document: {str(e)}"
         )
 
+@router.get("/{document_id}/download_url")
+async def get_document_download_url(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns a presigned URL for this document's S3 object, if the user owns it or is admin.
+    """
+    doc = db.query(DBDocument).filter(DBDocument.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.created_by != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    s3_manager = S3Manager()
+    presigned_url = s3_manager.get_presigned_url(doc.s3_key)
+    if not presigned_url:
+        raise HTTPException(status_code=500, detail="Failed to generate presigned URL")
+
+    return {"url": presigned_url}
+    
 @router.delete("/{document_id}", response_model=Document)
 async def delete_document(
     document_id: str,

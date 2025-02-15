@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, ConfigDict
-from app.database.models import DocumentCategory
+from backend.app.database.models import DocumentCategory
 
 class Token(BaseModel):
     access_token: str
@@ -39,27 +39,27 @@ class Document(DocumentBase):
     s3_key: str
     status: str
     mime_type: Optional[str] = None
-    
+
     # Thumbnail and preview
     thumbnail_s3_key: Optional[str] = None
     thumbnail_generated: bool = False
     preview_s3_key: Optional[str] = None
-    
+
     # Processing metadata
     total_chunks: Optional[int] = None
     processed_chunks: Optional[int] = None
     error_message: Optional[str] = None
     page_count: Optional[int] = None
-    
+
     # Vector search fields
     embedding_generated: bool = False
     last_indexed_at: Optional[datetime] = None
-    
+
     # Timestamps and ownership
     created_at: datetime
     updated_at: datetime
     created_by: str
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 class ChatBase(BaseModel):

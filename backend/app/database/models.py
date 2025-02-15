@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Bool
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from enum import Enum
-from .database import Base
+from backend.app.database.database import Base
 
 class DocumentStatus(str, Enum):
     UPLOADING = "uploading"

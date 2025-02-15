@@ -1,7 +1,7 @@
 # app/frontend/pages/admin_management.py
 import streamlit as st
-from app.frontend.utils import format_size, format_date
-from app.frontend.api_client import APIClient
+from frontend.utils import format_size, format_date
+from frontend.api_client import APIClient
 
 def get_status_color(status: str) -> str:
     """Get color code for document status"""

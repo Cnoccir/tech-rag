@@ -7,11 +7,11 @@ from fastapi import UploadFile, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
-from app.database.models import Document as DBDocument, User, DocumentStatus, DocumentCategory
-from app.schemas import Document, DocumentCreate
-from app.config import get_settings
-from app.document.s3_manager import S3Manager
-from app.document.docling_processor import DoclingProcessor
+from backend.app.database.models import Document as DBDocument, User, DocumentStatus, DocumentCategory
+from backend.app.schemas import Document, DocumentCreate
+from backend.app.config import get_settings
+from backend.app.document.s3_manager import S3Manager
+from backend.app.document.docling_processor import DoclingProcessor
 
 settings = get_settings()
 

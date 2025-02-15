@@ -5,8 +5,8 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from app.database.models import User
-from app.config import get_settings
+from backend.app.database.models import User
+from backend.app.config import get_settings
 
 settings = get_settings()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

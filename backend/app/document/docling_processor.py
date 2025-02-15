@@ -11,8 +11,8 @@ from docling.document_converter import DocumentConverter
 from docling.chunking import HybridChunker
 from langchain_community.embeddings import OpenAIEmbeddings
 
-from app.document.s3_manager import S3Manager
-from app.document.tokenizer import OpenAITokenizerWrapper
+from backend.app.document.s3_manager import S3Manager
+from backend.app.document.tokenizer import OpenAITokenizerWrapper
 
 load_dotenv()
 logger = logging.getLogger(__name__)

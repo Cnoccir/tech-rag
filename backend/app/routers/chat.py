@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Any, List, Dict
-from app.database.database import get_db
-from app.routers.auth import get_current_user
+from backend.app.database.database import get_db
+from backend.app.routers.auth import get_current_user
 from sqlalchemy.orm import Session
-from app.database.models import Document as DBDocument
-from app.chat.chat_manager import ChatManager
+from backend.app.database.models import Document as DBDocument
+from backend.app.chat.chat_manager import ChatManager
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 

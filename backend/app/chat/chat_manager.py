@@ -4,7 +4,7 @@ from langchain_community.chat_models import ChatOpenAI  # Updated import
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
 import logging
 
-from app.document.docling_processor import DoclingProcessor
+from backend.app.document.docling_processor import DoclingProcessor
 
 logger = logging.getLogger("app")
 

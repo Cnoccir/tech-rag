@@ -2,9 +2,9 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import logging
-from app.routers import auth, documents, chat
-from app.config import get_settings
-from app.logging_config import setup_logging
+from backend.app.routers import auth, documents, chat
+from backend.app.config import get_settings
+from backend.app.logging_config import setup_logging
 
 # Setup logging first
 setup_logging()

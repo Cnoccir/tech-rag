@@ -1,6 +1,6 @@
 import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
-from app.frontend.api_client import APIClient
+from frontend.api_client import APIClient
 
 def show_chat():
     """Chat interface view"""

@@ -7,7 +7,7 @@ import os
 from typing import List, Dict, Optional
 import json
 import logging
-from .s3_manager import S3Manager
+from backend.app.document.s3_manager import S3Manager
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class DocumentProcessor:
         self.index_name = os.getenv('PINECONE_INDEX_NAME')
         if not self.index_name:
             raise ValueError("PINECONE_INDEX_NAME environment variable is not set")
-            
+
         self.index = pinecone.Index(self.index_name)
         self.embeddings = OpenAIEmbeddings()
         self.s3_manager = S3Manager()
@@ -40,7 +40,7 @@ class DocumentProcessor:
         # Extract text and metadata from PDF
         doc = fitz.open(file_path)
         pages = []
-        
+
         for page_num in range(len(doc)):
             page = doc[page_num]
             text = page.get_text()
@@ -78,7 +78,7 @@ class DocumentProcessor:
             "total_pages": len(doc),
             "pages": pages
         }
-        
+
         mapping_key = f"{document_id}_mapping.json"
         self.s3_manager.s3_client.put_object(
             Bucket=self.s3_manager.bucket_name,
@@ -95,14 +95,14 @@ class DocumentProcessor:
     def search_document(self, document_id: str, query: str, top_k: int = 3) -> List[Dict]:
         """Search for relevant chunks in a document using Pinecone."""
         query_embedding = self.embeddings.embed_query(query)
-        
+
         results = self.index.query(
             vector=query_embedding,
             filter={"document_id": document_id},
             top_k=top_k,
             include_metadata=True
         )
-        
+
         return [{
             "text": match.metadata["text"],
             "metadata": {
@@ -120,11 +120,11 @@ class DocumentProcessor:
                 Key=mapping_key
             )
             mapping = json.loads(response['Body'].read())
-            
+
             for page in mapping["pages"]:
                 if page["page_num"] == page_num:
                     return page["text"]
-                    
+
             return None
         except Exception as e:
             logger.error(f"Error retrieving page content: {str(e)}")
