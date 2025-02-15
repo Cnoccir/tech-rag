@@ -1,11 +1,10 @@
-from typing import List
+from typing import List, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.database import get_db
-from app.database.models import User, Document as DBDocument
-from app.auth.auth import get_current_user
+from app.database.models import Document as DBDocument, User
 from app.document.document_manager import DocumentManager
-from app.schemas import Document, DocumentCreate, DocumentBase
+from app.routers.auth import get_current_user
+from app.schemas import Document, DocumentCreate, DocumentResponse
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -26,11 +25,11 @@ def convert_db_document(db_doc: DBDocument) -> Document:
         created_by=str(db_doc.created_by)
     )
 
-@router.post("/upload", response_model=Document)
-async def upload_document(
+@router.post("/upload", response_model=DocumentResponse)
+def upload_document(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: Any = Depends(get_db),
+    current_user: Any = Depends(get_current_user)
 ):
     """Upload a new document for processing."""
     if not current_user.is_admin:
@@ -50,20 +49,20 @@ async def upload_document(
         )
     
     doc_manager = DocumentManager(db)
-    db_document = await doc_manager.upload_document(file, current_user)
+    db_document = doc_manager.upload_document(file, current_user)
 
     # Convert the ORM model to a Pydantic response model
     return convert_db_document(db_document)
 
-@router.get("/status/{document_id}", response_model=Document)
-async def get_document_status(
+@router.get("/status/{document_id}", response_model=DocumentResponse)
+def get_document_status(
     document_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: Any = Depends(get_db),
+    current_user: Any = Depends(get_current_user)
 ):
     """Get the status of a document."""
     doc_manager = DocumentManager(db)
-    db_document = await doc_manager.get_document_status(document_id, current_user)
+    db_document = doc_manager.get_document_status(document_id, current_user)
     
     if not db_document:
         raise HTTPException(
@@ -73,23 +72,23 @@ async def get_document_status(
     
     return convert_db_document(db_document)
 
-@router.get("/list", response_model=List[Document])
-async def list_documents(
+@router.get("/list", response_model=List[DocumentResponse])
+def list_documents(
     include_deleted: bool = False,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: Any = Depends(get_db),
+    current_user: Any = Depends(get_current_user)
 ):
     """List all documents for the current user."""
     doc_manager = DocumentManager(db)
-    db_documents = await doc_manager.list_documents(current_user, include_deleted)
+    db_documents = doc_manager.list_documents(current_user, include_deleted)
 
     return [convert_db_document(doc) for doc in db_documents]
 
-@router.delete("/{document_id}", response_model=Document)
-async def delete_document(
+@router.delete("/{document_id}", response_model=DocumentResponse)
+def delete_document(
     document_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: Any = Depends(get_db),
+    current_user: Any = Depends(get_current_user)
 ):
     """Delete a document and its associated data."""
     if not current_user.is_admin:
@@ -99,7 +98,7 @@ async def delete_document(
         )
 
     doc_manager = DocumentManager(db)
-    db_document = await doc_manager.delete_document(document_id, current_user)
+    db_document = doc_manager.delete_document(document_id, current_user)
     
     if not db_document:
         raise HTTPException(

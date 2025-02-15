@@ -1,23 +1,23 @@
-from typing import List, Optional
-from fastapi import UploadFile
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+import os
 from datetime import datetime
-import uuid
-import boto3
+from typing import List, Optional
+from fastapi import UploadFile, HTTPException
+from sqlalchemy.orm import Session
+from sqlalchemy import select
 from app.database.models import Document as DBDocument, User, DocumentStatus
 from app.schemas import Document as DocumentSchema, DocumentCreate
 from app.config import get_settings
 
+settings = get_settings()
+
 class DocumentManager:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: Session):
         self.db = db
-        self.settings = get_settings()
         self.s3_client = boto3.client(
             's3',
-            aws_access_key_id=self.settings.aws_access_key_id,
-            aws_secret_access_key=self.settings.aws_secret_access_key,
-            region_name=self.settings.aws_region
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            region_name=settings.aws_region
         )
 
     def _to_schema(self, document: DBDocument) -> DocumentSchema:
@@ -43,14 +43,14 @@ class DocumentManager:
         file_size = len(file_content)
         
         self.s3_client.put_object(
-            Bucket=self.settings.aws_bucket_name,
+            Bucket=settings.aws_bucket_name,
             Key=s3_key,
             Body=file_content
         )
         
         return file_size
 
-    async def upload_document(self, file: UploadFile, user: User) -> DocumentSchema:
+    def upload_document(self, file: UploadFile, user: User) -> DocumentSchema:
         """Upload a document and start processing."""
         document_id = str(uuid.uuid4())
         file_extension = file.filename.split('.')[-1] if '.' in file.filename else ''
@@ -71,51 +71,51 @@ class DocumentManager:
         )
         
         self.db.add(document)
-        await self.db.commit()
-        await self.db.refresh(document)
+        self.db.commit()
+        self.db.refresh(document)
         
         # Start async processing
         # TODO: Implement background task for processing
         
         return self._to_schema(document)
 
-    async def get_document_status(self, document_id: str, user: User) -> Optional[DocumentSchema]:
+    def get_document_status(self, document_id: str, user: User) -> Optional[DocumentSchema]:
         """Get the status of a document."""
         query = select(DBDocument).where(
             DBDocument.id == document_id,
             DBDocument.created_by == user.id
         )
-        result = await self.db.execute(query)
+        result = self.db.execute(query)
         document = result.scalar_one_or_none()
         
         if document:
             return self._to_schema(document)
         return None
 
-    async def list_documents(self, user: User, include_deleted: bool = False) -> List[DocumentSchema]:
+    def list_documents(self, user: User, include_deleted: bool = False) -> List[DocumentSchema]:
         """List all documents for the user."""
         query = select(DBDocument).where(DBDocument.created_by == user.id)
         if not include_deleted:
             query = query.where(DBDocument.status != DocumentStatus.DELETED)
             
-        result = await self.db.execute(query)
+        result = self.db.execute(query)
         documents = result.scalars().all()
         
         return [self._to_schema(doc) for doc in documents]
 
-    async def delete_document(self, document_id: str, user: User) -> Optional[DocumentSchema]:
+    def delete_document(self, document_id: str, user: User) -> Optional[DocumentSchema]:
         """Mark a document as deleted."""
         query = select(DBDocument).where(
             DBDocument.id == document_id,
             DBDocument.created_by == user.id
         )
-        result = await self.db.execute(query)
+        result = self.db.execute(query)
         document = result.scalar_one_or_none()
         
         if document:
             document.status = DocumentStatus.DELETED
             document.updated_at = datetime.utcnow()
-            await self.db.commit()
-            await self.db.refresh(document)
+            self.db.commit()
+            self.db.refresh(document)
             return self._to_schema(document)
         return None
