@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # Database Configuration
     database_url: str = Field(
-        "postgresql+asyncpg://postgres:postgres@localhost/tech_rag",
+        "postgresql+psycopg2://postgres:postgres@localhost/tech_rag",
         alias="DATABASE_URL"
     )
 

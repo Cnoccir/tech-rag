@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from enum import Enum
@@ -10,6 +10,12 @@ class DocumentStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     DELETED = "deleted"
+
+class DocumentCategory(str, Enum):
+    HONEYWELL = "Honeywell"
+    TRIDIUM = "Tridium"
+    JOHNSON_CONTROLS = "Johnson Controls"
+    GENERAL = "General"
 
 class User(Base):
     __tablename__ = "users"
@@ -31,14 +37,37 @@ class Document(Base):
     filename = Column(String(255), nullable=False)
     s3_key = Column(String(255), nullable=False)
     status = Column(String(20), nullable=False, default=DocumentStatus.UPLOADING)
+    
+    # File metadata
+    file_type = Column(String(100), nullable=False)
+    file_size = Column(Integer, nullable=False)  # in bytes
+    mime_type = Column(String(100), nullable=True)  # For more precise content type handling
+    
+    # Document categorization and description
+    category = Column(SQLEnum(DocumentCategory), nullable=True, default=DocumentCategory.GENERAL)
+    title = Column(String(255), nullable=True)  # Optional title different from filename
+    description = Column(Text, nullable=True)  # Document description or summary
+    tags = Column(Text, nullable=True)  # Comma-separated tags for additional categorization
+    
+    # Thumbnail and preview
+    thumbnail_s3_key = Column(String(255), nullable=True)  # S3 key for the thumbnail image
+    thumbnail_generated = Column(Boolean, default=False)  # Flag to track thumbnail generation
+    preview_s3_key = Column(String(255), nullable=True)  # S3 key for a preview version (e.g., first page or excerpt)
+    
+    # Processing metadata
     total_chunks = Column(Integer, nullable=True)
     processed_chunks = Column(Integer, nullable=True)
     error_message = Column(String(500), nullable=True)
+    page_count = Column(Integer, nullable=True)  # Number of pages for PDFs
+    
+    # Vector search fields
+    embedding_generated = Column(Boolean, default=False)  # Flag to track embedding generation
+    last_indexed_at = Column(DateTime, nullable=True)  # When the document was last indexed for search
+    
+    # Timestamps and ownership
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by = Column(String, ForeignKey("users.id"))
-    file_type = Column(String(100), nullable=False)
-    file_size = Column(Integer, nullable=False)  # in bytes
     
     # Relationships
     creator = relationship("User", back_populates="documents")

@@ -1,5 +1,6 @@
 import sys
 import os
+import uuid
 from pathlib import Path
 
 # Add the project root directory to the Python path
@@ -11,7 +12,7 @@ from app.database.models import User
 from app.auth.auth import get_password_hash
 from dotenv import load_dotenv
 
-def create_admin_user(username: str, email: str, password: str):
+def create_admin_user(username: str, password: str):
     db = SessionLocal()
     try:
         # Check if admin user already exists
@@ -22,9 +23,9 @@ def create_admin_user(username: str, email: str, password: str):
 
         # Create new admin user
         admin_user = User(
+            id=str(uuid.uuid4()),
             username=username,
-            email=email,
-            password_hash=get_password_hash(password),
+            password=get_password_hash(password),
             is_admin=True
         )
         db.add(admin_user)
@@ -39,10 +40,9 @@ def main():
     load_dotenv()
     
     username = "admin"
-    email = "admin@example.com"
-    password = "admin4100"  # You should change this in production
+    password = "admin123"  # You should change this in production
     
-    create_admin_user(username, email, password)
+    create_admin_user(username, password)
 
 if __name__ == "__main__":
     main()

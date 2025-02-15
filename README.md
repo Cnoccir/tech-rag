@@ -58,6 +58,38 @@ python scripts/init_db.py
 streamlit run app/main.py
 ```
 
+## Running the Application
+
+### Streamlit Frontend
+To run the Streamlit frontend:
+```bash
+streamlit run app/frontend/Home.py
+```
+
+### FastAPI Backend
+To run the FastAPI backend:
+```bash
+uvicorn app.main:app --reload
+```
+
+The backend will be available at `http://127.0.0.1:8000` and the frontend at `http://localhost:8501`.
+
+## Database Migrations
+
+### Creating a New Migration
+To create a new migration:
+```bash
+alembic revision --autogenerate -m "Migration message"
+```
+
+### Applying Migrations
+To apply the migrations to the database:
+```bash
+alembic upgrade head
+```
+
+Ensure PostgreSQL is running and the database URL is correctly configured in your `.env` file.
+
 ## Project Structure
 
 ```
