@@ -1,108 +1,45 @@
-# Technical Document Knowledge Assistant
-
-A Streamlit-based Knowledge Assistant that serves as an authenticated, searchable, and interactive document repository for technical PDFs. The assistant integrates retrieval-augmented generation (RAG) and AI-driven workflows to enhance user experience.
-
-## Features
-
-- Cross-site authentication
-- Document repository with search and filtering
-- AI-powered PDF chat with multi-document reasoning
-- Admin panel for document management
-- Enhanced PDF viewer with dynamic search
-- Vector-based retrieval and hybrid search
-
-## Setup
-
-1. Create a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-3. Set up environment variables:
-Create a `.env` file with the following variables:
-```
-# OpenAI Configuration
-OPENAI_API_KEY=your_openai_api_key
-
-# Database Configuration
-DATABASE_URL=postgresql://user:password@localhost:5432/tech_rag
-
-# Authentication
-SECRET_KEY=your_secret_key
-
-# AWS Configuration
-AWS_ACCESS_KEY_ID=your_aws_access_key
-AWS_SECRET_ACCESS_KEY=your_aws_secret_key
-AWS_REGION=your_aws_region
-AWS_BUCKET_NAME=your_bucket_name
-
-# Pinecone Configuration
-PINECONE_API_KEY=your_pinecone_api_key
-PINECONE_ENVIRONMENT=your_pinecone_environment
-PINECONE_INDEX_NAME=your_pinecone_index_name
-```
-```
-
 ## Running the Application
 
-### Streamlit Frontend
-To run the Streamlit frontend:
+The application consists of two components that need to be run separately:
+
+### 1. FastAPI Backend
 ```bash
+# From project root
+python run.py
+# Or alternatively:
+uvicorn app.main:app --reload --port 8000
+```
+The backend API will be available at `http://localhost:8000`
+
+### 2. Streamlit Frontend
+```bash
+# In a separate terminal, from project root
 streamlit run app/frontend/app.py
 ```
+The frontend will be available at `http://localhost:8501`
 
-### FastAPI Backend
-To run the FastAPI backend:
+### Accessing the Application
+
+1. First ensure both services are running:
+   - Backend should show: "Uvicorn running on http://0.0.0.0:8000"
+   - Frontend should automatically open in your browser at http://localhost:8501
+
+2. Login with default admin credentials:
+   - Username: admin
+   - Password: admin123!(change this in production)
+
+3. API documentation is available at:
+   - Swagger UI: `http://localhost:8000/api/v1/docs`
+   - ReDoc: `http://localhost:8000/api/v1/redoc`
+
+### Checking Services
+
+1. Backend Health Check:
 ```bash
-uvicorn app.main:app --reload
+curl http://localhost:8000/api/v1/
+# Should return: {"status":"online","message":"Tech RAG API is running","version":"1.0.0"}
 ```
 
-The backend will be available at `http://127.0.0.1:8000` and the frontend at `http://localhost:8501`.
-
-## Database Migrations
-
-### Creating a New Migration
-To create a new migration:
-```bash
-alembic revision --autogenerate -m "Migration message"
-```
-
-### Applying Migrations
-To apply the migrations to the database:
-```bash
-alembic upgrade head
-```
-
-Ensure PostgreSQL is running and the database URL is correctly configured in your `.env` file.
-
-## Project Structure
-
-```
-tech_rag/
-├── app/
-│   ├── auth/           # Authentication modules
-│   ├── chat/           # Chat and RAG components
-│   ├── database/       # Database models and utilities
-│   ├── document/       # Document processing and management
-│   ├── static/         # Static files
-│   └── main.py         # Main Streamlit application
-├── scripts/            # Utility scripts
-├── tests/             # Test files
-├── .env               # Environment variables
-├── README.md
-└── requirements.txt
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+2. Frontend:
+- The Streamlit interface should automatically open in your default browser
+- If not, manually navigate to `http://localhost:8501`

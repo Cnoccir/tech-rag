@@ -1,11 +1,16 @@
+# app/chat/chat_manager.py
 from typing import List, Dict, Optional
-from langchain.chat_models import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI  # Updated import
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
+import logging
+
 from app.document.docling_processor import DoclingProcessor
-import json
+
+logger = logging.getLogger("app")
 
 class ChatManager:
     def __init__(self):
+        """Initialize chat manager with document processor and language model."""
         self.document_processor = DoclingProcessor()
         self.llm = ChatOpenAI(temperature=0.7)
         self.system_prompt = """You are a helpful technical assistant with access to various technical documents.
@@ -23,66 +28,80 @@ class ChatManager:
         chat_history: Optional[List[Dict]] = None
     ) -> Dict:
         """Generate a response using RAG with Docling's advanced document understanding."""
-        # Search across all documents
-        all_results = []
-        for doc_id in document_ids:
-            results = self.document_processor.search_document(query, doc_id)
-            all_results.extend(results)
+        try:
+            logger.debug(f"Generating response for query: {query}")
 
-        # Sort results by score
-        all_results.sort(key=lambda x: x["metadata"]["score"], reverse=True)
+            # Search across all documents
+            all_results = []
+            for doc_id in document_ids:
+                results = self.document_processor.search_document(query, doc_id)
+                all_results.extend(results)
 
-        # Build context with structured information
-        contexts = []
-        for result in all_results:
-            metadata = result["metadata"]
-            context_entry = f"\nSection: {metadata.get('title', 'Untitled')}"
-            if metadata.get('page_numbers'):
-                context_entry += f"\nPage(s): {', '.join(map(str, metadata['page_numbers']))}"
-            context_entry += f"\nContent: {result['text']}"
-            contexts.append(context_entry)
+            # Sort results by score
+            all_results.sort(key=lambda x: x["metadata"]["score"], reverse=True)
+            logger.debug(f"Found {len(all_results)} relevant chunks")
 
-        context = "\n\n".join(contexts)
+            # Build context with structured information
+            contexts = []
+            for result in all_results:
+                metadata = result["metadata"]
+                context_entry = f"\nSection: {metadata.get('title', 'Untitled')}"
+                if metadata.get('page_numbers'):
+                    context_entry += f"\nPage(s): {', '.join(map(str, metadata['page_numbers']))}"
+                context_entry += f"\nContent: {result['text']}"
+                contexts.append(context_entry)
 
-        # Build conversation history
-        messages = [SystemMessage(content=self.system_prompt)]
+            context = "\n\n".join(contexts)
 
-        if chat_history:
-            for msg in chat_history:
-                if msg["role"] == "user":
-                    messages.append(HumanMessage(content=msg["content"]))
-                else:
-                    messages.append(AIMessage(content=msg["content"]))
+            # Build conversation history
+            messages = [SystemMessage(content=self.system_prompt)]
 
-        # Add current query with context
-        current_prompt = f"""Context from documents:
-        {context}
+            if chat_history:
+                for msg in chat_history:
+                    if msg["role"] == "user":
+                        messages.append(HumanMessage(content=msg["content"]))
+                    else:
+                        messages.append(AIMessage(content=msg["content"]))
 
-        User question: {query}
+            # Add current query with context
+            current_prompt = f"""Context from documents:
+            {context}
 
-        Please provide a response based on the context above. Include specific citations with section titles and page numbers where available."""
+            User question: {query}
 
-        messages.append(HumanMessage(content=current_prompt))
+            Please provide a response based on the context above. Include specific citations with section titles and page numbers where available."""
 
-        # Generate response
-        response = self.llm.generate([messages])
-        ai_message = response.generations[0][0].text
+            messages.append(HumanMessage(content=current_prompt))
 
-        # Extract citations and structure them
-        citations = []
-        for result in all_results:
-            if result["text"].lower() in ai_message.lower():
-                citations.append({
-                    "section": result["metadata"].get("title", "Untitled"),
-                    "page_numbers": result["metadata"].get("page_numbers", []),
-                    "text": result["text"][:200] + "..."  # Truncate long citations
-                })
+            # Generate response
+            logger.debug("Generating LLM response")
+            response = self.llm.generate([messages])
+            ai_message = response.generations[0][0].text
 
-        return {
-            "response": ai_message,
-            "citations": citations
-        }
+            # Extract citations and structure them
+            citations = []
+            for result in all_results:
+                if result["text"].lower() in ai_message.lower():
+                    citations.append({
+                        "section": result["metadata"].get("title", "Untitled"),
+                        "page_numbers": result["metadata"].get("page_numbers", []),
+                        "text": result["text"][:200] + "..."  # Truncate long citations
+                    })
+
+            logger.info(f"Generated response with {len(citations)} citations")
+            return {
+                "response": ai_message,
+                "citations": citations
+            }
+
+        except Exception as e:
+            logger.error(f"Error generating response: {str(e)}", exc_info=True)
+            raise
 
     def get_document_structure(self, document_id: str) -> Optional[Dict]:
         """Get the hierarchical structure of a document."""
-        return self.document_processor.get_document_structure(document_id)
+        try:
+            return self.document_processor.get_document_structure(document_id)
+        except Exception as e:
+            logger.error(f"Error getting document structure: {str(e)}", exc_info=True)
+            return None
