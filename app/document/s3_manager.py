@@ -1,91 +1,63 @@
-import boto3
 import os
-import tempfile
-import uuid
-from botocore.config import Config
+import boto3
 from botocore.exceptions import ClientError
-import logging
-from typing import Optional, Tuple, Dict
-from pathlib import Path
-
-logger = logging.getLogger(__name__)
+from botocore.config import Config
 
 class S3Manager:
     def __init__(self):
-        self.s3_client = self._get_s3_client()
-        self.bucket_name = os.getenv('AWS_BUCKET_NAME')
+        self.bucket_name = os.getenv("AWS_BUCKET_NAME")
         if not self.bucket_name:
-            raise ValueError("AWS_BUCKET_NAME environment variable is not set")
+            raise ValueError("AWS_BUCKET_NAME must be set in .env")
 
-    def _get_s3_client(self):
-        """Initialize and return an S3 client."""
+        region = os.getenv("AWS_REGION", "us-east-1")
+        access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+
+        config = Config(
+            retries={"max_attempts": 3, "mode": "standard"},
+            region_name=region
+        )
+        self.s3_client = boto3.client(
+            "s3",
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            config=config
+        )
+
+    def upload_file(self, local_path: str, s3_key: str) -> bool:
         try:
-            config = Config(
-                retries={'max_attempts': 3, 'mode': 'standard'},
-                region_name=os.getenv('AWS_REGION')
-            )
-
-            return boto3.client('s3',
-                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-                config=config
-            )
-        except Exception as e:
-            logger.error(f"Failed to initialize S3 client: {str(e)}")
-            raise
-
-    def generate_s3_key(self, doc_id: str, file_type: str = 'pdf') -> str:
-        """Generate an S3 key for a document."""
-        return f"{doc_id}.{file_type}"
-
-    def upload_file(self, local_file_path: str, doc_id: Optional[str] = None) -> Tuple[Dict[str, str], int]:
-        """Upload a file to S3."""
-        if doc_id is None:
-            doc_id = str(uuid.uuid4())
-        
-        s3_key = self.generate_s3_key(doc_id)
-        try:
-            self.s3_client.upload_file(local_file_path, self.bucket_name, s3_key)
-            logger.info(f"Successfully uploaded file to S3 with key: {s3_key}")
-            return {"doc_id": doc_id}, 200
+            self.s3_client.upload_file(local_path, self.bucket_name, s3_key)
+            return True
         except ClientError as e:
-            logger.error(f"Error uploading file: {str(e)}")
-            return {"error": str(e)}, 500
+            return False
 
-    def download_file(self, doc_id: str) -> Optional[str]:
-        """Download a file from S3 to a temporary location."""
-        s3_key = self.generate_s3_key(doc_id)
-        temp_dir = tempfile.TemporaryDirectory()
-        local_path = Path(temp_dir.name) / s3_key
-
+    def download_file(self, s3_key: str, local_path: str) -> bool:
+        """
+        Download from S3. Returns True if success, False if error.
+        """
         try:
-            self.s3_client.download_file(self.bucket_name, s3_key, str(local_path))
-            return str(local_path)
-        except ClientError as e:
-            logger.error(f"Error downloading file {doc_id}: {str(e)}")
-            temp_dir.cleanup()
-            return None
+            self.s3_client.download_file(self.bucket_name, s3_key, local_path)
+            return True
+        except ClientError:
+            return False
 
-    def delete_file(self, doc_id: str) -> Tuple[Dict[str, str], int]:
-        """Delete a file from S3."""
-        s3_key = self.generate_s3_key(doc_id)
+    def delete_file(self, s3_key: str) -> bool:
         try:
             self.s3_client.delete_object(Bucket=self.bucket_name, Key=s3_key)
-            return {"message": f"Successfully deleted {doc_id}"}, 200
-        except ClientError as e:
-            logger.error(f"Error deleting file {doc_id}: {str(e)}")
-            return {"error": str(e)}, 500
+            return True
+        except ClientError:
+            return False
 
-    def get_download_url(self, doc_id: str, expires_in: int = 3600) -> Optional[str]:
-        """Generate a presigned URL for downloading a file."""
-        s3_key = self.generate_s3_key(doc_id)
+    def get_presigned_url(self, s3_key: str, expires_in=3600) -> str:
+        """
+        Generate a presigned URL for reading object from S3.
+        If fails, returns empty string.
+        """
         try:
-            url = self.s3_client.generate_presigned_url(
-                'get_object',
-                Params={'Bucket': self.bucket_name, 'Key': s3_key},
+            return self.s3_client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self.bucket_name, "Key": s3_key},
                 ExpiresIn=expires_in
             )
-            return url
-        except ClientError as e:
-            logger.error(f"Error generating presigned URL for {doc_id}: {str(e)}")
-            return None
+        except ClientError:
+            return ""

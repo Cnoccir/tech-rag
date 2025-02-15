@@ -1,152 +1,161 @@
-from typing import List, Dict, Optional
 import os
-from pathlib import Path
-import tempfile
 import json
 import logging
+import tempfile
+from typing import List, Dict, Optional
+
+import pinecone
+from dotenv import load_dotenv
+
 from docling.document_converter import DocumentConverter
 from docling.chunking import HybridChunker
-from langchain_community.embeddings import OpenAIEmbeddings
-import pinecone
-from .tokenizer import OpenAITokenizerWrapper
-from .s3_manager import S3Manager
 
+from app.document.s3_manager import S3Manager
+from app.document.tokenizer import OpenAITokenizerWrapper
+from langchain.embeddings import OpenAIEmbeddings
+
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 class DoclingProcessor:
     def __init__(self):
-        # Initialize Pinecone
-        pinecone.init(
-            api_key=os.getenv('PINECONE_API_KEY'),
-            environment=os.getenv('PINECONE_ENVIRONMENT')
-        )
-        self.index_name = os.getenv('PINECONE_INDEX_NAME')
-        if not self.index_name:
-            raise ValueError("PINECONE_INDEX_NAME environment variable is not set")
-            
-        self.index = pinecone.Index(self.index_name)
-        self.embeddings = OpenAIEmbeddings()
+        """
+        Initialize S3, Pinecone, Docling converter/chunker, and embeddings.
+        """
         self.s3_manager = S3Manager()
-        
-        # Initialize Docling components
+
+        pinecone_api = os.getenv("PINECONE_API_KEY")
+        pinecone_env = os.getenv("PINECONE_ENVIRONMENT")
+        pinecone_index = os.getenv("PINECONE_INDEX_NAME")
+
+        if not pinecone_api or not pinecone_env or not pinecone_index:
+            raise ValueError("Must set PINECONE_API_KEY, PINECONE_ENVIRONMENT, PINECONE_INDEX_NAME in .env")
+
+        pinecone.init(api_key=pinecone_api, environment=pinecone_env)
+        self.index = pinecone.Index(pinecone_index)
+
         self.converter = DocumentConverter()
-        self.tokenizer = OpenAITokenizerWrapper()
+        self.tokenizer = OpenAITokenizerWrapper(model_name="cl100k_base", max_length=8191)
         self.chunker = HybridChunker(
             tokenizer=self.tokenizer,
-            max_tokens=8191,  # text-embedding-3-large's maximum context length
-            merge_peers=True,
+            max_tokens=8191,
+            merge_peers=True
         )
+        self.embeddings = OpenAIEmbeddings()  # uses OPENAI_API_KEY
 
-    def process_document(self, file_path: str, document_id: str, metadata: Dict) -> Dict:
-        """Process a document using Docling's advanced processing pipeline."""
+    def process_and_index_document(self, document_id: str, s3_key: str, metadata: Dict) -> Dict:
+        """
+        1) Download PDF from S3
+        2) Convert & chunk with Docling
+        3) Embed & upsert to Pinecone
+        4) Save mapping file to S3
+        """
         try:
-            # Convert document using Docling
-            result = self.converter.convert(file_path)
-            if not result.document:
-                raise ValueError(f"Failed to convert document: {file_path}")
+            with tempfile.TemporaryDirectory() as tmpdir:
+                local_pdf = os.path.join(tmpdir, "temp.pdf")
+                downloaded = self.s3_manager.download_file(s3_key, local_pdf)
+                if not downloaded:
+                    raise FileNotFoundError(f"Could not download from S3: {s3_key}")
 
-            # Apply hybrid chunking
-            chunks = list(self.chunker.chunk(dl_doc=result.document))
-            
-            # Create embeddings and store in Pinecone
-            vectors_to_upsert = []
-            for i, chunk in enumerate(chunks):
-                # Extract metadata from chunk
-                chunk_metadata = {
-                    'document_id': document_id,
-                    'page_numbers': sorted(set(
-                        prov.page_no
-                        for item in chunk.meta.doc_items
-                        for prov in item.prov
-                    )) if chunk.meta.doc_items else None,
-                    'title': chunk.meta.headings[0] if chunk.meta.headings else None,
-                    'section': chunk.meta.section if hasattr(chunk.meta, 'section') else None,
-                    **metadata
-                }
+                result = self.converter.convert(local_pdf)
+                if not result.document:
+                    raise ValueError("Docling conversion returned empty doc.")
 
-                # Create embedding
-                embedding = self.embeddings.embed_query(chunk.text)
-                
-                vectors_to_upsert.append({
-                    'id': f"{document_id}_chunk_{i}",
-                    'values': embedding,
-                    'metadata': {
-                        **chunk_metadata,
-                        'text': chunk.text[:1000]  # Store truncated text for preview
+                docling_doc = result.document
+                chunks = list(self.chunker.chunk(dl_doc=docling_doc))
+                if not chunks:
+                    raise ValueError("No chunks from docling chunker.")
+
+                vectors = []
+                for i, chunk in enumerate(chunks):
+                    text = chunk.text
+                    chunk_meta = {
+                        "document_id": document_id,
+                        "s3_key": s3_key,
+                        "title": chunk.meta.headings[0] if chunk.meta.headings else None,
+                        "page_numbers": sorted({
+                            prov.page_no
+                            for item in chunk.meta.doc_items
+                            for prov in item.prov
+                        }) if chunk.meta.doc_items else None,
+                        **metadata
                     }
-                })
-
-            # Upsert to Pinecone in batches
-            batch_size = 100
-            for i in range(0, len(vectors_to_upsert), batch_size):
-                batch = vectors_to_upsert[i:i + batch_size]
-                self.index.upsert(vectors=batch)
-
-            # Store document mapping in S3
-            mapping = {
-                "total_chunks": len(chunks),
-                "metadata": metadata,
-                "structure": {
-                    "sections": [
+                    emb = self.embeddings.embed_query(text)
+                    vectors.append((
+                        f"{document_id}_chunk_{i}",
+                        emb,
                         {
+                            **chunk_meta,
+                            "chunk_text": text  # If you want the chunk text in Pinecone
+                        }
+                    ))
+
+                # Upsert to pinecone
+                self.index.upsert(vectors=vectors)
+
+                # Save doc structure in S3
+                structure = {
+                    "num_chunks": len(chunks),
+                    "metadata": metadata,
+                    "chunks": [
+                        {
+                            "chunk_id": f"{document_id}_chunk_{i}",
                             "title": chunk.meta.headings[0] if chunk.meta.headings else None,
-                            "chunk_id": f"{document_id}_chunk_{i}"
+                            "pages": chunk_meta["page_numbers"],
+                            "snippet": text[:300]
                         }
                         for i, chunk in enumerate(chunks)
                     ]
                 }
-            }
-            
-            mapping_key = f"{document_id}_mapping.json"
-            self.s3_manager.s3_client.put_object(
-                Bucket=self.s3_manager.bucket_name,
-                Key=mapping_key,
-                Body=json.dumps(mapping)
-            )
+                map_key = f"docling_mappings/{document_id}_mapping.json"
+                self.s3_manager.s3_client.put_object(
+                    Bucket=self.s3_manager.bucket_name,
+                    Key=map_key,
+                    Body=json.dumps(structure)
+                )
 
-            return {
-                "status": "success",
-                "num_chunks": len(chunks),
-                "document_id": document_id
-            }
+                return {"status": "success", "indexed_chunks": len(chunks)}
 
         except Exception as e:
-            logger.error(f"Error processing document: {str(e)}")
-            raise
+            logger.exception(f"Error in process_and_index_document: {e}")
+            return {"status": "error", "error": str(e)}
 
     def search_document(self, query: str, document_id: Optional[str] = None, top_k: int = 3) -> List[Dict]:
-        """Search for relevant chunks using Pinecone."""
-        query_embedding = self.embeddings.embed_query(query)
-        
-        # Prepare filter
-        filter_dict = {"document_id": document_id} if document_id else {}
-        
+        """
+        Query pinecone to retrieve top chunks. If document_id is provided,
+        filter results by that doc ID. Return chunk metadata + snippet from Pinecone.
+        """
+        emb = self.embeddings.embed_query(query)
+        flt = {}
+        if document_id:
+            flt = {"document_id": document_id}
+
         results = self.index.query(
-            vector=query_embedding,
-            filter=filter_dict,
+            vector=emb,
+            filter=flt,
             top_k=top_k,
             include_metadata=True
         )
-        
-        return [{
-            "text": match.metadata["text"],
-            "metadata": {
-                "page_numbers": match.metadata.get("page_numbers"),
-                "title": match.metadata.get("title"),
-                "section": match.metadata.get("section"),
-                "score": match.score
-            }
-        } for match in results.matches]
+        out = []
+        if results and results.matches:
+            for match in results.matches:
+                out.append({
+                    "score": match.score,
+                    "metadata": match.metadata
+                })
+        return out
 
     def get_document_structure(self, document_id: str) -> Optional[Dict]:
-        """Get the document's structure from S3."""
-        mapping_key = f"{document_id}_mapping.json"
+        """
+        Retrieve the doc's structure mapping from S3.
+        """
         try:
-            response = self.s3_manager.s3_client.get_object(
+            map_key = f"docling_mappings/{document_id}_mapping.json"
+            obj = self.s3_manager.s3_client.get_object(
                 Bucket=self.s3_manager.bucket_name,
-                Key=mapping_key
+                Key=map_key
             )
-            return json.loads(response['Body'].read())
+            return json.loads(obj["Body"].read())
         except Exception as e:
-            logger.error(f"Error retrieving document structure: {str(e)}")
+            logger.error(f"Could not retrieve structure for doc {document_id}: {e}")
             return None

@@ -47,15 +47,6 @@ PINECONE_API_KEY=your_pinecone_api_key
 PINECONE_ENVIRONMENT=your_pinecone_environment
 PINECONE_INDEX_NAME=your_pinecone_index_name
 ```
-
-4. Initialize the database:
-```bash
-python scripts/init_db.py
-```
-
-5. Run the application:
-```bash
-streamlit run app/main.py
 ```
 
 ## Running the Application
@@ -63,7 +54,7 @@ streamlit run app/main.py
 ### Streamlit Frontend
 To run the Streamlit frontend:
 ```bash
-streamlit run app/frontend/Home.py
+streamlit run app/frontend/app.py
 ```
 
 ### FastAPI Backend
